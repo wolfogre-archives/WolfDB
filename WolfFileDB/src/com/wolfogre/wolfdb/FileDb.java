@@ -7,8 +7,16 @@ import com.aliyun.oss.model.DownloadFileResult;
 import com.aliyun.oss.model.OSSObject;
 
 import java.io.*;
+import java.net.URL;
 import java.security.MessageDigest;
-import java.sql.*;
+import java.security.NoSuchAlgorithmException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
 
 /**
  * Created by wolfogre on 8/14/16.
@@ -93,20 +101,88 @@ public class FileDb {
     }
 
 
-    public String putFile(InputStream inputStream){
-        return "";
+    public String putFile(InputStream inputStream) throws FileDbException {
+        byte[] bytes;
+        try {
+            bytes = new byte[inputStream.available()];
+            inputStream.read(bytes);
+            inputStream.close();
+        } catch (IOException e) {
+            throw new FileDbException("Can not read local file");
+        }
+
+        String code = getCode(bytes);
+        FileInfo fileInfo;
+
+        fileInfo = FileInfo.get(code, statement);
+        if(fileInfo != null)
+            return fileInfo.getCode();
+
+        Date date = new Date();
+        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy/MM/dd/");
+        String path = simpleDateFormat.format(date) + code;
+        try {
+            ossClient.putObject(bucket, path, new ByteArrayInputStream(bytes));
+        } catch (Exception e) {
+            throw new FileDbException("Upload fail", e);
+        }
+        FileInfo.put(code, path, statement);
+
+        return code;
     }
 
-    public String getFileUrl(String fileId, int seconds){
-        return "";
+    public URL getFileUrl(String fileId, int seconds) throws FileDbException {
+        FileInfo fileInfo =FileInfo.get(fileId, statement);
+
+        if(fileInfo == null)
+            throw new FileDbException("Can not get file whose id is " + fileId);
+
+        return ossClient.generatePresignedUrl(
+                bucket,
+                fileInfo.getPath(),
+                new Date(new Date().getTime() + seconds * 1000)
+        );
+
     }
 
-    public OutputStream getFile(String fileId){
-        return new ByteArrayOutputStream();
+    public InputStream getFile(String fileId) throws FileDbException {
+        FileInfo fileInfo = FileInfo.get(fileId, statement);
+        if(fileInfo == null)
+            throw new FileDbException("Can not get file whose id is " + fileId);
+        try{
+            OSSObject ossObject = ossClient.getObject(bucket, fileInfo.getPath());
+            return ossObject.getObjectContent();
+        } catch (Exception e){
+            throw new FileDbException("Get file input stream error whose id is ", e);
+        }
+
     }
 
-    public void deleteFile(String fileId){
-        return;
+    public void deleteFile(String fileId) throws FileDbException {
+        FileInfo fileInfo = FileInfo.get(fileId, statement);
+        if(fileInfo == null)
+            throw new FileDbException("Can not get file whose id is " + fileId);
+        try{
+            ossClient.deleteObject(bucket, fileInfo.getPath());
+        } catch (Exception e){
+            throw new FileDbException("Get file input stream error whose id is ", e);
+        }
+    }
+
+    private String getCode(byte[] bytes) throws FileDbException {
+        MessageDigest mdSHA;
+        try {
+            mdSHA = MessageDigest.getInstance("SHA");
+        } catch (NoSuchAlgorithmException e) {
+            throw new FileDbException("Can not load SHA", e);
+        }
+        byte[] result = mdSHA.digest(bytes);
+        StringBuilder stringBuilder = new StringBuilder();
+        for(byte b : result){
+            stringBuilder.append(Integer.toHexString((b >> 4) & 15));
+            stringBuilder.append(Integer.toHexString(b & 15));
+        }
+        return stringBuilder.toString();
     }
 
 

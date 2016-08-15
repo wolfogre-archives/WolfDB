@@ -31,7 +31,7 @@ public class Main {
         System.out.println(new Date().getTime());
         System.out.println(toHexString(mdMD5.digest(str.getBytes())));
         System.out.println(new Date().getTime());
-        
+
         System.out.println(toHexString(mdSHA.digest(bytes)));
         System.out.println(new Date().getTime());
         System.out.println(toHexString(mdMD5.digest(bytes)));
