@@ -1,9 +1,8 @@
 package com.wolfogre.wolfdb;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URL;
+import java.util.LinkedList;
 import java.util.Scanner;
 
 /**
@@ -14,15 +13,57 @@ public class Test {
         System.out.println("Please input sqlite file path:");
         Scanner scanner = new Scanner(System.in);
         FileDb fileDb = new FileDb(scanner.next());
-        System.out.println("Please input upload file path:");
-        InputStream inputStream = new FileInputStream(scanner.next());
         try {
             fileDb.open();
-            String id = fileDb.putFile(inputStream);
-            URL url = fileDb.getFileUrl(id, 60);
-            System.out.println(url.toString());
+            boolean flag = true;
+            LinkedList<String> record = new LinkedList<>();
+
+            while(scanner.hasNext() && flag){
+                switch (scanner.next()){
+                    case "help":
+                        System.out.println("help");
+                        System.out.println("list");
+                        System.out.println("upload");
+                        System.out.println("geturl");
+                        System.out.println("download");
+                        System.out.println("exit");
+                    case "list":
+                        record.forEach(System.out::println);
+                        break;
+                    case "upload":
+                        String fileId = fileDb.putFile(new FileInputStream(scanner.next()));
+                        System.out.println("File ID: " + fileId);
+                        for(String str : record){
+                            if(str.equals(fileId))
+                                break;
+                        }
+                        record.add(fileId);
+                        break;
+                    case "geturl":
+                        System.out.println(fileDb.getFileUrl(scanner.next(), scanner.nextInt()).toString());
+                        break;
+                    case "download":
+                        InputStream is = fileDb.getFile(scanner.next());
+                        FileOutputStream fileOutputStream = new FileOutputStream(new File(scanner.next()));
+                        int read;
+                        while((read = is.read()) != -1){
+                            fileOutputStream.write(read);
+                        }
+                        fileOutputStream.close();
+                        break;
+                    case "exit":
+                        flag = false;
+                        break;
+                    default:
+                        System.out.println("Input error");
+                        continue;
+                }
+
+                System.out.println("Done !");
+            }
+
             fileDb.close();
-        } catch (FileDbException e) {
+        } catch (FileDbException | IOException e) {
             e.printStackTrace();
         }
 

@@ -185,7 +185,6 @@ public class FileDb {
         return stringBuilder.toString();
     }
 
-
     @Override
     protected void finalize() throws Throwable {
         close();
