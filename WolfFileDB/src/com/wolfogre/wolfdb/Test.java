@@ -18,7 +18,7 @@ public class Test {
             boolean flag = true;
             LinkedList<String> record = new LinkedList<>();
 
-            while(scanner.hasNext() && flag){
+            while(flag && scanner.hasNext()){
                 switch (scanner.next()){
                     case "help":
                         System.out.println("help");
