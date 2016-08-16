@@ -1,21 +1,16 @@
 package com.wolfogre.wolfdb;
 
-import com.aliyun.oss.ClientConfiguration;
 import com.aliyun.oss.OSSClient;
-import com.aliyun.oss.model.DownloadFileRequest;
-import com.aliyun.oss.model.DownloadFileResult;
 import com.aliyun.oss.model.OSSObject;
 
 import java.io.*;
 import java.net.URL;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Random;
 
 
 /**
@@ -27,9 +22,11 @@ public class FileDb {
     private OSSClient ossClient;
     private Statement statement;
     private String bucket;
+    private Random random;
 
     public FileDb(String sqlitePath){
         this.sqlitePath = sqlitePath;
+        random = new Random();
     }
 
     public void open() throws FileDbException {
@@ -62,11 +59,11 @@ public class FileDb {
         String accessKeySecret;
 
         try {
-            endpoint = statement.executeQuery("SELECT value FROM config WHERE key = 'endpoint'").getString(1);
-            accessKeyId = statement.executeQuery("SELECT value FROM config WHERE key = 'accessKeyId'").getString(1);
-            accessKeySecret = statement.executeQuery("SELECT value FROM config WHERE key = 'accessKeySecret'").getString(1);
-            bucket = statement.executeQuery("SELECT value FROM config WHERE key = 'bucket'").getString(1);
-        } catch (SQLException e) {
+            endpoint = executeQuery("SELECT value FROM config WHERE key = 'endpoint'");
+            accessKeyId = executeQuery("SELECT value FROM config WHERE key = 'accessKeyId'");
+            accessKeySecret = executeQuery("SELECT value FROM config WHERE key = 'accessKeySecret'");
+            bucket = executeQuery("SELECT value FROM config WHERE key = 'bucket'");
+        } catch (Exception e) {
             close();
             throw new FileDbException("Can not get endpoint, accessKeyId or accessKeySecret from " + sqlitePath, e);
         }
@@ -112,61 +109,59 @@ public class FileDb {
         }
 
         String code = getCode(bytes);
-        FileInfo fileInfo;
-
-        fileInfo = FileInfo.get(code, statement);
-        if(fileInfo != null)
-            return fileInfo.getCode();
-
-        Date date = new Date();
-        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy/MM/dd/");
-        String path = simpleDateFormat.format(date) + code;
-        try {
-            ossClient.putObject(bucket, path, new ByteArrayInputStream(bytes));
-        } catch (Exception e) {
-            throw new FileDbException("Upload fail", e);
+        if(!executeExists("SELECT EXISTS (SELECT * FROM file WHERE code = '" + code + "')")){
+            Date date = new Date();
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy/MM/dd/");
+            String path = simpleDateFormat.format(date) + code;
+            try {
+                ossClient.putObject(bucket, path, new ByteArrayInputStream(bytes));
+            } catch (Exception e) {
+                throw new FileDbException("Upload fail", e);
+            }
+            executeUpdate("INSERT INTO file (code, path) VALUES ('" + code + "','" + path +  "')");
         }
-        FileInfo.put(code, path, statement);
+        String handle = createHandle();
+        executeUpdate("UPDATE reference SET code = '" + code + "' WHERE handle = '" + handle + "'");
+        executeUpdate("UPDATE file SET count = count + 1 WHERE code = '" + code + "'");
 
-        return code;
+        return handle;
     }
 
-    public URL getFileUrl(String fileId, int seconds) throws FileDbException {
-        FileInfo fileInfo =FileInfo.get(fileId, statement);
+    public URL getFileUrl(String handle, int seconds) throws FileDbException {
 
-        if(fileInfo == null)
-            throw new FileDbException("Can not get file whose id is " + fileId);
+        if(!executeExists("SELECT EXISTS (SELECT * FROM reference WHERE handle = '" + handle + "')"))
+            throw new FileDbException("Can not get file whose handle is " + handle);
+
+        String code = executeQuery("SELECT code FROM reference WHERE handle = '" + handle + "'");
 
         return ossClient.generatePresignedUrl(
                 bucket,
-                fileInfo.getPath(),
+                executeQuery("SELECT path FROM file WHERE code = '" + code + "'"),
                 new Date(new Date().getTime() + seconds * 1000)
         );
 
     }
 
-    public InputStream getFile(String fileId) throws FileDbException {
-        FileInfo fileInfo = FileInfo.get(fileId, statement);
-        if(fileInfo == null)
-            throw new FileDbException("Can not get file whose id is " + fileId);
+    public InputStream getFile(String handle) throws FileDbException {
+        if(!executeExists("SELECT EXISTS (SELECT * FROM reference WHERE handle = '" + handle + "')"))
+            throw new FileDbException("Can not get file whose handle is " + handle);
+        String code = executeQuery("SELECT code FROM reference WHERE handle = '" + handle + "'");
         try{
-            OSSObject ossObject = ossClient.getObject(bucket, fileInfo.getPath());
+            OSSObject ossObject = ossClient.getObject(bucket, executeQuery("SELECT path FROM file WHERE code = '" + code + "'"));
             return ossObject.getObjectContent();
         } catch (Exception e){
-            throw new FileDbException("Get file input stream error whose id is ", e);
+            throw new FileDbException("Get file input stream error whose handle is ", e);
         }
 
     }
 
-    public void deleteFile(String fileId) throws FileDbException {
-        FileInfo fileInfo = FileInfo.get(fileId, statement);
-        if(fileInfo == null)
-            throw new FileDbException("Can not get file whose id is " + fileId);
-        try{
-            ossClient.deleteObject(bucket, fileInfo.getPath());
-        } catch (Exception e){
-            throw new FileDbException("Get file input stream error whose id is ", e);
-        }
+    public void deleteFile(String handle) throws FileDbException {
+        if(!executeExists("SELECT EXISTS (SELECT * FROM reference WHERE handle = '" + handle + "')"))
+            throw new FileDbException("Can not get file whose handle is " + handle);
+        String code = executeQuery("SELECT code FROM reference WHERE handle = '" + handle + "'");
+        executeUpdate("DELETE reference WHERE handle = '" + handle + "'");
+        executeUpdate("UPDATE file SET count = count - 1 WHERE code = '" + code + "'");
+        // TODO:原本这里应该判断 count 是否等于0，删除 OSS 里的资源和 file 表里对应的记录，但代价很大，考虑使用统一的垃圾回收机制
     }
 
     private String getCode(byte[] bytes) throws FileDbException {
@@ -183,6 +178,41 @@ public class FileDb {
             stringBuilder.append(Integer.toHexString(b & 15));
         }
         return stringBuilder.toString();
+    }
+
+    private String createHandle() throws FileDbException {
+        StringBuilder sb = new StringBuilder();
+        for(int i = 0; i < 50; ++i)
+            sb.append((char)('A' + random.nextInt(26)));
+        String handle = sb.toString();
+        if(executeExists("SELECT EXISTS (SELECT * FROM reference WHERE handle = '" + handle + "')"))
+            return createHandle();
+        executeUpdate("INSERT INTO reference (handle) VALUES ('" + handle + "')");
+        return sb.toString();
+    }
+
+    private int executeUpdate(String sql) throws FileDbException {
+        try {
+            return statement.executeUpdate(sql);
+        } catch (SQLException e) {
+            throw new FileDbException("SQL error", e);
+        }
+    }
+
+    private String executeQuery(String sql) throws FileDbException {
+        try {
+            return statement.executeQuery(sql).getString(1);
+        } catch (SQLException e) {
+            throw new FileDbException("SQL error", e);
+        }
+    }
+
+    private boolean executeExists(String sql) throws FileDbException {
+        try {
+            return statement.executeQuery(sql).getBoolean(1);
+        } catch (SQLException e) {
+            throw new FileDbException("SQL error", e);
+        }
     }
 
     @Override

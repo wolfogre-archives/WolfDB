@@ -31,13 +31,13 @@ public class Test {
                         record.forEach(System.out::println);
                         break;
                     case "upload":
-                        String fileId = fileDb.putFile(new FileInputStream(scanner.next()));
-                        System.out.println("File ID: " + fileId);
+                        String handle = fileDb.putFile(new FileInputStream(scanner.next()));
+                        System.out.println("File ID: " + handle);
                         for(String str : record){
-                            if(str.equals(fileId))
+                            if(str.equals(handle))
                                 break;
                         }
-                        record.add(fileId);
+                        record.add(handle);
                         break;
                     case "geturl":
                         System.out.println(fileDb.getFileUrl(scanner.next(), scanner.nextInt()).toString());

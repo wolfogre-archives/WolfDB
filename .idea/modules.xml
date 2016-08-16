@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/ExtractProtonNMR/ExtractProtonNMR.iml" filepath="$PROJECT_DIR$/ExtractProtonNMR/ExtractProtonNMR.iml" />
       <module fileurl="file://$PROJECT_DIR$/OssTest/OssTest.iml" filepath="$PROJECT_DIR$/OssTest/OssTest.iml" />
       <module fileurl="file://$PROJECT_DIR$/TestMessageDigestSpi/TestMessageDigestSpi.iml" filepath="$PROJECT_DIR$/TestMessageDigestSpi/TestMessageDigestSpi.iml" />
       <module fileurl="file://$PROJECT_DIR$/WolfFileDB/WolfFileDB.iml" filepath="$PROJECT_DIR$/WolfFileDB/WolfFileDB.iml" />
