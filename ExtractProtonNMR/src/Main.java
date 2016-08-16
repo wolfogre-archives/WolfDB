@@ -1,6 +1,8 @@
 import com.mongodb.MongoClient;
+import com.mongodb.client.DistinctIterable;
 import com.mongodb.client.MongoDatabase;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -8,6 +10,7 @@ import org.jsoup.select.Elements;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -17,6 +20,22 @@ public class Main {
     static MongoClient mongoClient = new MongoClient();
     static MongoDatabase db = mongoClient.getDatabase("ProtonNMR");
     public static void main(String[] args) throws IOException {
+        //ExtractBasicData();
+        ExtractOligo();
+
+    }
+
+    static void ExtractOligo() throws IOException {
+        ArrayList<String> oligos = new ArrayList<>();
+        DistinctIterable<String> result = db.getCollection("BasicData").distinct("Oligo", String.class);
+        for(String str : result){
+            oligos.add(str);
+        }
+        // https://www.ccrc.uga.edu/world/xgnmr/showseq.php?seq=XGol
+
+    }
+
+    static void ExtractBasicData() throws IOException {
         ArrayList<File> files = new ArrayList<>();
         files.add(new File("/home/wolfogre/IdeaProjects/WolfDB/ExtractProtonNMR/data/D-Glcol.html"));
         files.add(new File("/home/wolfogre/IdeaProjects/WolfDB/ExtractProtonNMR/data/α-D-Xylp.html"));
