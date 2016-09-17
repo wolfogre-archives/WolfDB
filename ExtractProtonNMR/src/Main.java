@@ -32,6 +32,24 @@ public class Main {
             oligos.add(str);
         }
         // https://www.ccrc.uga.edu/world/xgnmr/showseq.php?seq=XGol
+        for(String str : oligos){
+            org.jsoup.nodes.Document doc =
+                    Jsoup.connect("https://www.ccrc.uga.edu/world/xgnmr/showseq.php?seq=" + str).get();
+            Element table = doc.select("table").first();
+            Elements trs = table.select("tr");
+            Element tr1 = trs.get(0);
+            Element tr2 = trs.get(1);
+            Document sub = new Document();
+            List<Document> images = new ArrayList<>();
+            for(Element e : tr1.select("td")){
+                images.add(new Document("name", e.select("img").first().attr("src")));
+                System.out.println(e.select("img").first().attr("src").substring("images/".length()));
+            }
+
+
+            Document d = new Document(str, sub);
+
+        }
 
     }
 
